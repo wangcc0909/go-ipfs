@@ -22,7 +22,7 @@ type mockResolver struct {
 	entries map[string]string
 }
 
-func testResolution(t *testing.T, resolver Resolver, name string, depth uint, expected string, expError error) {
+func testResolution(t *testing.T, resolver Resolver, name string, depth uint64, expected string, expError error) {
 	t.Helper()
 	p, err := resolver.Resolve(context.Background(), name, opts.Depth(depth))
 	if err != expError {

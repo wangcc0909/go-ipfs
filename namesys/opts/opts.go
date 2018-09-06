@@ -18,7 +18,7 @@ const (
 // ResolveOpts specifies options for resolving an IPNS path
 type ResolveOpts struct {
 	// Recursion depth limit
-	Depth uint
+	Depth uint64
 	// The number of IPNS records to retrieve from the DHT
 	// (the best record is selected from this set)
 	DhtRecordCount uint
@@ -43,7 +43,7 @@ func DefaultResolveOpts() ResolveOpts {
 type ResolveOpt func(*ResolveOpts)
 
 // Depth is the recursion depth limit
-func Depth(depth uint) ResolveOpt {
+func Depth(depth uint64) ResolveOpt {
 	return func(o *ResolveOpts) {
 		o.Depth = depth
 	}
