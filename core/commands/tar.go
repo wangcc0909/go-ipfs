@@ -56,6 +56,9 @@ represent it.
 
 		c := node.Cid()
 
+		nd.Provider.Provide(c)
+
+		// TODO: why is this here?
 		fi.FileName()
 		return cmds.EmitOnce(res, &coreiface.AddEvent{
 			Name: fi.FileName(),

@@ -91,6 +91,8 @@ may also specify the level of compression by specifying '-l=<1-9>'.
 			return err
 		}
 
+		node.Provider.Provide(dn.Cid())
+
 		archive, _ := req.Options[archiveOptionName].(bool)
 		reader, err := uarchive.DagArchive(ctx, dn, p.String(), node.DAG, archive, cmplvl)
 		if err != nil {

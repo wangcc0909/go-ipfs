@@ -15,8 +15,7 @@ package coreapi
 
 import (
 	"context"
-
-	core "github.com/ipfs/go-ipfs/core"
+	"github.com/ipfs/go-ipfs/core"
 	coreiface "github.com/ipfs/go-ipfs/core/coreapi/interface"
 
 	ipld "gx/ipfs/QmcKKBwfz6FyQdHR2jsXrrF6XeSBXYL86anmWNewpFpoF5/go-ipld-format"

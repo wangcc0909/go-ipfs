@@ -138,7 +138,11 @@ into an object of the specified format.
 				return err
 			}
 		}
-		return nil
+
+		return cids.ForEach(func(cid cid.Cid) error {
+			nd.Provider.Provide(cid)
+			return nil
+		})
 	},
 	Type: OutputObject{},
 	Encoders: cmds.EncoderMap{
@@ -180,6 +184,8 @@ format.
 			return err
 		}
 
+		nd.Provider.Provide(obj.Cid())
+
 		var out interface{} = obj
 		if len(rem) > 0 {
 			final, _, err := obj.Resolve(rem)
@@ -218,6 +224,8 @@ var DagResolveCmd = &cmds.Command{
 		if err != nil {
 			return err
 		}
+
+		nd.Provider.Provide(lastCid)
 
 		return cmds.EmitOnce(res, &ResolveOutput{
 			Cid:     lastCid,
