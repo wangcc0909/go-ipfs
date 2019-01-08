@@ -29,6 +29,13 @@ type Result struct {
 	Error      error
 }
 
+// Called with a cid.Cid that has just been removed from the blockstore.
+// The intention is to clean up any other information about this block
+// such as provider tracking.
+type Cleanup interface {
+	Cleanup(cid.Cid) error
+}
+
 // GC performs a mark and sweep garbage collection of the blocks in the blockstore
 // first, it creates a 'marked' set and adds to it the following:
 // - all recursively pinned blocks, plus all of their descendants (recursively)
@@ -38,8 +45,7 @@ type Result struct {
 //
 // The routine then iterates over every block in the blockstore and
 // deletes any block that is not found in the marked set.
-func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn pin.Pinner, bestEffortRoots []cid.Cid) <-chan Result {
-
+func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn pin.Pinner, cleanup Cleanup, bestEffortRoots []cid.Cid) <-chan Result {
 	elock := log.EventBegin(ctx, "GC.lockWait")
 	unlocker := bs.GCLock()
 	elock.Done()
@@ -95,9 +101,12 @@ func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn 
 					if err != nil {
 						errors = true
 						output <- Result{Error: &CannotDeleteBlockError{k, err}}
-						//log.Errorf("Error removing key from blockstore: %s", err)
+						// log.Errorf("Error removing key from blockstore: %s", err)
 						// continue as error is non-fatal
 						continue loop
+					}
+					if err := cleanup.Cleanup(k); err != nil {
+						log.Warningf("Warning: unable to cleanup block: %s", k)
 					}
 					select {
 					case output <- Result{KeyRemoved: k}:

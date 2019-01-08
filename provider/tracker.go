@@ -25,6 +25,10 @@ func (t *Tracker) Track(cid cid.Cid) error {
 	return t.datastore.Put(providerTrackingKey(cid), cid.Bytes())
 }
 
+func (t *Tracker) Untrack(cid cid.Cid) error {
+	return t.datastore.Delete(providerTrackingKey(cid))
+}
+
 func providerTrackingKey(cid cid.Cid) ds.Key {
 	return ds.NewKey(providerTrackingPrefix + cid.String())
 }

@@ -18,7 +18,7 @@ const (
 	provideOutgoingTimeout     = 15 * time.Second
 )
 
-type Strategy func(context.Context, chan cid.Cid, cid.Cid)
+type Strategy func(context.Context, cid.Cid) <-chan cid.Cid
 
 type Provider struct {
 	ctx context.Context
@@ -60,7 +60,16 @@ func (p *Provider) Run() {
 
 // Provider the given cid using specified strategy.
 func (p *Provider) Provide(root cid.Cid) {
-	p.strategy(p.ctx, p.incoming, root)
+	cids := p.strategy(p.ctx, root)
+	go func() {
+		for cid := range cids {
+			p.incoming <- cid
+		}
+	}()
+}
+
+func (p *Provider) Unprovide(cid cid.Cid) error {
+	return p.tracker.Untrack(cid)
 }
 
 // Announce to the world that a block is provided.
@@ -81,7 +90,7 @@ func (p *Provider) handleIncoming() {
 		case key := <-p.incoming:
 			isTracking, err := p.tracker.IsTracking(key)
 			if err != nil {
-				log.Warning("Unable to check provider tracking: %s", err)
+				log.Warning("Unable to check provider tracking on incoming: %s", err)
 				continue
 			}
 
@@ -133,7 +142,7 @@ func (p *Provider) handleOutgoing() {
 				case key := <-p.outgoing:
 					isTracking, err := p.tracker.IsTracking(key)
 					if err != nil {
-						log.Warning("Unable to check provider tracking: %s, %s", key, err)
+						log.Warning("Unable to check provider tracking on outgoing: %s, %s", key, err)
 						continue
 					}
 					if isTracking {

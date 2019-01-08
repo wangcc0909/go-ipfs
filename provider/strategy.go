@@ -8,11 +8,15 @@ import (
 )
 
 func NewProvideAllStrategy(dag ipld.DAGService) Strategy {
-	return func(ctx context.Context, cids chan cid.Cid, root cid.Cid) {
-		cids <- root
-		merkledag.EnumerateChildren(ctx, merkledag.GetLinksWithDAG(dag), root, func(cid cid.Cid) bool {
-			cids <- cid
-			return true
-		})
+	return func(ctx context.Context, root cid.Cid) <-chan cid.Cid {
+		cids := make(chan cid.Cid)
+		go func() {
+			cids <- root
+			merkledag.EnumerateChildren(ctx, merkledag.GetLinksWithDAG(dag), root, func(cid cid.Cid) bool {
+				cids <- cid
+				return true
+			})
+		}()
+		return cids
 	}
 }

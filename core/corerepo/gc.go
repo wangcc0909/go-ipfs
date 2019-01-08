@@ -9,6 +9,7 @@ import (
 	"github.com/ipfs/go-ipfs/core"
 	gc "github.com/ipfs/go-ipfs/pin/gc"
 	repo "github.com/ipfs/go-ipfs/repo"
+	provider "github.com/ipfs/go-ipfs/provider"
 
 	humanize "gx/ipfs/QmPSBJL4momYnE7DcUyk2DVhD6rH488ZmHBGLbxNdhU44K/go-humanize"
 	cid "gx/ipfs/QmR8BauakNcBa3RbE4nbQu76PDiJgoQgz8AJdhJuiU4TAw/go-cid"
@@ -27,6 +28,14 @@ type GC struct {
 	StorageGC  uint64
 	SlackGB    uint64
 	Storage    uint64
+}
+
+type GCCleanup struct {
+	*provider.Provider
+}
+
+func (c *GCCleanup) Cleanup(cid cid.Cid) error {
+	return c.Unprovide(cid)
 }
 
 func NewGC(n *core.IpfsNode) (*GC, error) {
@@ -86,7 +95,7 @@ func GarbageCollect(n *core.IpfsNode, ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	rmed := gc.GC(ctx, n.Blockstore, n.Repo.Datastore(), n.Pinning, roots)
+	rmed := gc.GC(ctx, n.Blockstore, n.Repo.Datastore(), n.Pinning, &GCCleanup{n.Provider}, roots)
 
 	return CollectResult(ctx, rmed, nil)
 }
@@ -154,7 +163,7 @@ func GarbageCollectAsync(n *core.IpfsNode, ctx context.Context) <-chan gc.Result
 		return out
 	}
 
-	return gc.GC(ctx, n.Blockstore, n.Repo.Datastore(), n.Pinning, roots)
+	return gc.GC(ctx, n.Blockstore, n.Repo.Datastore(), n.Pinning, &GCCleanup{n.Provider}, roots)
 }
 
 func PeriodicGC(ctx context.Context, node *core.IpfsNode) error {
