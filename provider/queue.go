@@ -26,7 +26,6 @@ type Queue struct {
 func NewQueue(name string, datastore ds.Datastore) *Queue {
 	q := &Queue{
 		name: name,
-		tail: 0,
 		head: math.MaxUint64,
 		lock: sync.Mutex{},
 		datastore: datastore,
