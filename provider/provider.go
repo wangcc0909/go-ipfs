@@ -129,7 +129,7 @@ func (p *Provider) handlePopulateOutgoing() {
 			log.Warning("Unable to dequeue from providing queue: %s", err)
 			continue
 		}
-		p.outgoing <- *key
+		p.outgoing <- key
 	}
 }
 

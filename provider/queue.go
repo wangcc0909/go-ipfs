@@ -49,32 +49,32 @@ func (q *Queue) Enqueue(cid cid.Cid) error {
 	return nil
 }
 
-func (q *Queue) Dequeue() (*cid.Cid, error) {
+func (q *Queue) Dequeue() (cid.Cid, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	if q.IsEmpty() {
 		// TODO figure out how IPFS folks are doing custom errors and make this comply
-		return nil, errors.New("queue is empty")
+		return cid.Undef, errors.New("queue is empty")
 	}
 
 	nextKey := q.queueKey(q.head)
 	value, err := q.datastore.Get(nextKey)
 	if err != nil {
-		return nil, err
+		return cid.Undef, err
 	}
 
-	cid, err := cid.Parse(value)
+	key, err := cid.Parse(value)
 	if err != nil {
-		return nil, err
+		return cid.Undef, err
 	}
 
 	if err := q.datastore.Delete(nextKey); err != nil {
-		return nil, err
+		return cid.Undef, err
 	}
 
 	q.head++
-	return &cid, nil
+	return key, nil
 }
 
 func (q *Queue) IsEmpty() bool {
