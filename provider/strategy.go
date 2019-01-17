@@ -16,6 +16,7 @@ func NewProvideAllStrategy(dag ipld.DAGService) Strategy {
 				cids <- cid
 				return true
 			})
+			close(cids)
 		}()
 		return cids
 	}
