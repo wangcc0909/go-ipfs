@@ -26,7 +26,6 @@ type Queue struct {
 func NewQueue(name string, datastore ds.Datastore) *Queue {
 	q := &Queue{
 		name: name,
-		head: math.MaxUint64,
 		lock: sync.Mutex{},
 		datastore: datastore,
 	}
@@ -91,7 +90,7 @@ func (q *Queue) prepare() error {
 		return err
 	}
 
-	// TODO: this is maybe dumb
+	q.head = math.MaxUint64
 	for entry := range results.Next() {
 		keyId := strings.TrimPrefix(entry.Key, q.queuePrefix())
 		id, err := strconv.ParseUint(keyId, 10, 64)
@@ -107,7 +106,6 @@ func (q *Queue) prepare() error {
 			q.tail = id
 		}
 	}
-
 	if q.head == math.MaxUint64 {
 		q.head = 0
 	}
