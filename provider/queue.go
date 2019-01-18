@@ -23,14 +23,19 @@ type Queue struct {
 	datastore ds.Datastore
 }
 
-func NewQueue(name string, datastore ds.Datastore) *Queue {
+func NewQueue(name string, datastore ds.Datastore) (*Queue, error) {
+	head, tail, err := getQueueHeadTail(name, datastore)
+	if err != nil {
+		return nil, err
+	}
 	q := &Queue{
 		name: name,
+		head: head,
+		tail: tail,
 		lock: sync.Mutex{},
 		datastore: datastore,
 	}
-	q.prepare()
-	return q
+	return q, nil
 }
 
 func (q *Queue) Enqueue(cid cid.Cid) error {
@@ -83,40 +88,41 @@ func (q *Queue) Length() uint64 {
 	return q.tail - q.head
 }
 
-func (q *Queue) prepare() error {
-	query := query.Query{Prefix: q.queuePrefix()}
-	results, err := q.datastore.Query(query)
+func (q *Queue) queueKey(id uint64) ds.Key {
+	return ds.NewKey(queuePrefix(q.name) + strconv.FormatUint(id, 10))
+}
+
+func queuePrefix(name string) string {
+	return "/" + name + "/queue/"
+}
+
+func getQueueHeadTail(name string, datastore ds.Datastore) (uint64, uint64, error) {
+	query := query.Query{Prefix: queuePrefix(name)}
+	results, err := datastore.Query(query)
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 
-	q.head = math.MaxUint64
+	var tail uint64 = 0
+	var head uint64 = math.MaxUint64
 	for entry := range results.Next() {
-		keyId := strings.TrimPrefix(entry.Key, q.queuePrefix())
+		keyId := strings.TrimPrefix(entry.Key, queuePrefix(name))
 		id, err := strconv.ParseUint(keyId, 10, 64)
 		if err != nil {
-			return err
+			return 0, 0, err
 		}
 
-		if id < q.head {
-			q.head = id
+		if id < head {
+			head = id
 		}
 
-		if id > q.tail {
-			q.tail = id
+		if id > tail {
+			tail = id
 		}
 	}
-	if q.head == math.MaxUint64 {
-		q.head = 0
+	if head == math.MaxUint64 {
+		head = 0
 	}
 
-	return nil
-}
-
-func (q *Queue) queueKey(id uint64) ds.Key {
-	return ds.NewKey(q.queuePrefix() + strconv.FormatUint(id, 10))
-}
-
-func (q *Queue) queuePrefix() string {
-	return "/" + q.name + "/queue/"
+	return head, tail, nil
 }
