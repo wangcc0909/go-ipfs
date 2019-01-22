@@ -328,7 +328,11 @@ func (n *IpfsNode) startLateOnlineServices(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	n.Provider = provider.NewProvider(ctx, strategy, tracker, queue, n.Routing)
+	failures, err := provider.NewQueue("provider-failures", n.Repo.Datastore())
+	if err != nil {
+		return err
+	}
+	n.Provider = provider.NewProvider(ctx, strategy, tracker, queue, failures, n.Routing)
 	go n.Provider.Run()
 
 	// Reprovider

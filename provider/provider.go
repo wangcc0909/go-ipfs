@@ -30,16 +30,20 @@ type Provider struct {
 	tracker *Tracker
 	// the CIDs for which provide announcements should be made
 	queue *Queue
+	// cids that fail during announce()
+	// TODO: handle these ... right now this queue grows indefinitely
+	failures *Queue
 	// used to announce providing to the network
 	contentRouting routing.ContentRouting
 }
 
-func NewProvider(ctx context.Context, strategy Strategy, tracker *Tracker, queue *Queue, contentRouting routing.ContentRouting) *Provider {
+func NewProvider(ctx context.Context, strategy Strategy, tracker *Tracker, queue *Queue, failures *Queue, contentRouting routing.ContentRouting) *Provider {
 	return &Provider{
 		ctx:            ctx,
 		strategy:       strategy,
 		tracker:        tracker,
 		queue:          queue,
+		failures: 		failures,
 		contentRouting: contentRouting,
 		lock:           sync.Mutex{},
 	}
@@ -127,6 +131,8 @@ func (p *Provider) handleAnnouncements() {
 
 				if err := p.announce(cid); err != nil {
 					log.Warningf("Unable to announce providing: %s, %s", cid, err)
+					// maybe the cid + err should go on the queue?
+					p.failures.Enqueue(cid)
 					continue
 				}
 
