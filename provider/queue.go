@@ -11,6 +11,8 @@ import (
 	"sync"
 )
 
+// Queue
+
 type Queue struct {
 	// used to differentiate queues in datastore
 	// e.g. provider vs reprovider
@@ -61,10 +63,20 @@ func (q *Queue) Dequeue() (cid.Cid, error) {
 		return cid.Undef, errors.New("queue is empty")
 	}
 
-	nextKey := q.queueKey(q.head)
-	value, err := q.datastore.Get(nextKey)
-	if err != nil {
-		return cid.Undef, err
+	var nextKey ds.Key
+	var value []byte
+	var err error
+	for {
+		nextKey = q.queueKey(q.head)
+		value, err = q.datastore.Get(nextKey)
+		if err == ds.ErrNotFound {
+			q.head++
+			continue
+		} else if err != nil {
+			return cid.Undef, err
+		} else {
+			break
+		}
 	}
 
 	key, err := cid.Parse(value)
