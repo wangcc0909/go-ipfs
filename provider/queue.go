@@ -11,6 +11,18 @@ import (
 	"sync"
 )
 
+// Entry
+
+type Entry struct {
+	cid cid.Cid
+	key ds.Key
+	datastore ds.Datastore
+}
+
+func (e *Entry) Complete() error {
+	return e.datastore.Delete(e.key)
+}
+
 // Queue
 
 type Queue struct {
@@ -54,13 +66,13 @@ func (q *Queue) Enqueue(cid cid.Cid) error {
 	return nil
 }
 
-func (q *Queue) Dequeue() (cid.Cid, error) {
+func (q *Queue) Dequeue() (*Entry, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	if q.IsEmpty() {
 		// TODO figure out how IPFS folks are doing custom errors and make this comply
-		return cid.Undef, errors.New("queue is empty")
+		return nil, errors.New("queue is empty")
 	}
 
 	var nextKey ds.Key
@@ -73,23 +85,26 @@ func (q *Queue) Dequeue() (cid.Cid, error) {
 			q.head++
 			continue
 		} else if err != nil {
-			return cid.Undef, err
+			return nil, err
 		} else {
 			break
 		}
 	}
 
-	key, err := cid.Parse(value)
+	id, err := cid.Parse(value)
 	if err != nil {
-		return cid.Undef, err
+		return nil, err
 	}
 
-	if err := q.datastore.Delete(nextKey); err != nil {
-		return cid.Undef, err
+	entry := &Entry {
+		cid: id,
+		key: nextKey,
+		datastore: q.datastore,
 	}
 
 	q.head++
-	return key, nil
+
+	return entry, nil
 }
 
 func (q *Queue) IsEmpty() bool {
@@ -128,8 +143,8 @@ func getQueueHeadTail(name string, datastore ds.Datastore) (uint64, uint64, erro
 			head = id
 		}
 
-		if id > tail {
-			tail = id
+		if (id+1) > tail {
+			tail = (id+1)
 		}
 	}
 	if head == math.MaxUint64 {

@@ -113,31 +113,40 @@ func (p *Provider) handleAnnouncements() {
 				// TODO: We should probably not actually Dequeue() right here, or at
 				// least have a plan to replace the entry in the event that something
 				// goes wrong or the process is killed
-				cid, err := p.queue.Dequeue()
+				entry, err := p.queue.Dequeue()
 				p.lock.Unlock()
 				if err != nil {
 					log.Warning("Unable to dequeue:", err)
                     continue
 				}
 
-				isTracking, err := p.tracker.IsTracking(cid)
+				isTracking, err := p.tracker.IsTracking(entry.cid)
 				if err != nil {
-					log.Warningf("Unable to check provider tracking on outgoing: %s, %s", cid, err)
+					log.Warningf("Unable to check provider tracking on outgoing: %s, %s", entry.cid, err)
 					continue
 				}
 				if isTracking {
 					continue
 				}
 
-				if err := p.announce(cid); err != nil {
-					log.Warningf("Unable to announce providing: %s, %s", cid, err)
+				if err := p.announce(entry.cid); err != nil {
+					log.Warningf("Unable to announce providing: %s, %s", entry.cid, err)
 					// maybe the cid + err should go on the queue?
-					p.failures.Enqueue(cid)
+					p.failures.Enqueue(entry.cid)
+					if err := entry.Complete(); err != nil {
+						log.Warningf("Unable to complete queue entry for failure: %s, %s", entry.cid, err)
+						continue
+					}
 					continue
 				}
 
-				if err := p.tracker.Track(cid); err != nil {
-					log.Warningf("Unable to track: %s, %s", cid, err)
+				if err := entry.Complete(); err != nil {
+					log.Warningf("Unable to complete queue entry for success: %s, %s", entry.cid, err)
+					continue
+				}
+
+				if err := p.tracker.Track(entry.cid); err != nil {
+					log.Warningf("Unable to track: %s, %s", entry.cid, err)
 					continue
 				}
 			}
