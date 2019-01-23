@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"gx/ipfs/QmR8BauakNcBa3RbE4nbQu76PDiJgoQgz8AJdhJuiU4TAw/go-cid"
+	bstore "gx/ipfs/QmS2aqUZLJp8kF1ihE5rvDGE5LvmKDPnx32w9Z1BW9xLV5/go-ipfs-blockstore"
 	"gx/ipfs/QmZBH87CAPFHcc7cYmBqeSQ98zQ3SX9KUxiYgzPmLWNVKz/go-libp2p-routing"
 	logging "gx/ipfs/QmcuXC5cxs79ro2cUuHs4HQ2bkDLJUYokwL8aivcX6HW3C/go-log"
 	"sync"
@@ -30,16 +31,19 @@ type Provider struct {
 	tracker *Tracker
 	// the CIDs for which provide announcements should be made
 	queue *Queue
+	// where the blocks live
+	blockstore bstore.Blockstore
 	// used to announce providing to the network
 	contentRouting routing.ContentRouting
 }
 
-func NewProvider(ctx context.Context, strategy Strategy, tracker *Tracker, queue *Queue, contentRouting routing.ContentRouting) *Provider {
+func NewProvider(ctx context.Context, strategy Strategy, tracker *Tracker, queue *Queue, blockstore bstore.Blockstore, contentRouting routing.ContentRouting) *Provider {
 	return &Provider{
 		ctx:            ctx,
 		strategy:       strategy,
 		tracker:        tracker,
 		queue:          queue,
+		blockstore:   	blockstore,
 		contentRouting: contentRouting,
 		lock:           sync.Mutex{},
 	}
@@ -82,7 +86,7 @@ func (p *Provider) announce(cid cid.Cid) error {
 	ctx, cancel := context.WithTimeout(p.ctx, provideOutgoingTimeout)
 	defer cancel()
 	if err := p.contentRouting.Provide(ctx, cid, true); err != nil {
-		log.Warning("Failed to provide key: %s", err)
+		log.Warning("Failed to provide cid: %s", err)
 		return err
 	}
 	return nil
@@ -122,6 +126,16 @@ func (p *Provider) handleAnnouncements() {
 					continue
 				}
 				if isTracking {
+					continue
+				}
+
+				inBlockstore, err := p.blockstore.Has(entry.cid)
+				if err != nil {
+					log.Warningf("Unable to check for presence in blockstore: %s, %s", entry.cid, err)
+					continue
+				}
+				if !inBlockstore {
+					p.tracker.Untrack(entry.cid)
 					continue
 				}
 
