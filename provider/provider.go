@@ -86,7 +86,7 @@ func (p *Provider) announce(cid cid.Cid) error {
 	ctx, cancel := context.WithTimeout(p.ctx, provideOutgoingTimeout)
 	defer cancel()
 	if err := p.contentRouting.Provide(ctx, cid, true); err != nil {
-		log.Warning("Failed to provide cid: %s", err)
+		log.Warningf("Failed to provide cid: %s", err)
 		return err
 	}
 	return nil
@@ -100,63 +100,54 @@ func (p *Provider) handleAnnouncements() {
 				select {
 				case <-p.ctx.Done():
 					return
-                default:
-				}
-
-				p.lock.Lock()
-				if p.queue.IsEmpty() {
-					p.lock.Unlock()
-					time.Sleep(1 * time.Second)
-					continue
-				}
-
-				// TODO: We should probably not actually Dequeue() right here, or at
-				// least have a plan to replace the entry in the event that something
-				// goes wrong or the process is killed
-				entry, err := p.queue.Dequeue()
-				p.lock.Unlock()
-				if err != nil {
-					log.Warning("Unable to dequeue:", err)
-                    continue
-				}
-
-				isTracking, err := p.tracker.IsTracking(entry.cid)
-				if err != nil {
-					log.Warningf("Unable to check provider tracking on outgoing: %s, %s", entry.cid, err)
-					continue
-				}
-				if isTracking {
-					continue
-				}
-
-				inBlockstore, err := p.blockstore.Has(entry.cid)
-				if err != nil {
-					log.Warningf("Unable to check for presence in blockstore: %s, %s", entry.cid, err)
-					continue
-				}
-				if !inBlockstore {
-					p.tracker.Untrack(entry.cid)
-					continue
-				}
-
-				if err := p.announce(entry.cid); err != nil {
-					log.Warningf("Unable to announce providing: %s, %s", entry.cid, err)
-					// TODO: Maybe put these failures onto a failures queue?
-					if err := entry.Complete(); err != nil {
-						log.Warningf("Unable to complete queue entry for failure: %s, %s", entry.cid, err)
+				case entry := <-p.queue.Dequeue():
+					isTracking, err := p.tracker.IsTracking(entry.cid)
+					if err != nil {
+						log.Warningf("Unable to check provider tracking on outgoing: %s, %s", entry.cid, err)
 						continue
 					}
-					continue
-				}
+					if isTracking {
+						if err := entry.Complete(); err != nil {
+							log.Warningf("Unable to complete queue entry when already tracking: %s, %s", entry.cid, err)
+							continue
+						}
+						continue
+					}
 
-				if err := entry.Complete(); err != nil {
-					log.Warningf("Unable to complete queue entry for success: %s, %s", entry.cid, err)
-					continue
-				}
+					inBlockstore, err := p.blockstore.Has(entry.cid)
+					if err != nil {
+						log.Warningf("Unable to check for presence in blockstore: %s, %s", entry.cid, err)
+						continue
+					}
+					if !inBlockstore {
+						if err := p.tracker.Untrack(entry.cid); err != nil {
+							log.Warningf("Unable to untrack: %s, %s", entry.cid, err)
+						}
+						if err := entry.Complete(); err != nil {
+							log.Warningf("Unable to complete queue entry when untracking: %s, %s", entry.cid, err)
+						}
+						continue
+					}
 
-				if err := p.tracker.Track(entry.cid); err != nil {
-					log.Warningf("Unable to track: %s, %s", entry.cid, err)
-					continue
+					if err := p.announce(entry.cid); err != nil {
+						log.Warningf("Unable to announce providing: %s, %s", entry.cid, err)
+						// TODO: Maybe put these failures onto a failures queue?
+						if err := entry.Complete(); err != nil {
+							log.Warningf("Unable to complete queue entry for failure: %s, %s", entry.cid, err)
+							continue
+						}
+						continue
+					}
+
+					if err := entry.Complete(); err != nil {
+						log.Warningf("Unable to complete queue entry for success: %s, %s", entry.cid, err)
+						continue
+					}
+
+					if err := p.tracker.Track(entry.cid); err != nil {
+						log.Warningf("Unable to track: %s, %s", entry.cid, err)
+						continue
+					}
 				}
 			}
 		}()

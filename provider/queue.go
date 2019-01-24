@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"errors"
 	"gx/ipfs/QmR8BauakNcBa3RbE4nbQu76PDiJgoQgz8AJdhJuiU4TAw/go-cid"
 	ds "gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore"
 	"gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore/query"
@@ -9,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Entry
@@ -35,6 +35,8 @@ type Queue struct {
 
 	lock sync.Mutex
 	datastore ds.Datastore
+
+	dequeue chan *Entry
 }
 
 func NewQueue(name string, datastore ds.Datastore) (*Queue, error) {
@@ -48,7 +50,9 @@ func NewQueue(name string, datastore ds.Datastore) (*Queue, error) {
 		tail: tail,
 		lock: sync.Mutex{},
 		datastore: datastore,
+		dequeue: make(chan *Entry),
 	}
+	q.run()
 	return q, nil
 }
 
@@ -66,14 +70,44 @@ func (q *Queue) Enqueue(cid cid.Cid) error {
 	return nil
 }
 
-func (q *Queue) Dequeue() (*Entry, error) {
+func (q *Queue) Dequeue() <-chan *Entry {
+	return q.dequeue
+}
+
+func (q *Queue) IsEmpty() bool {
+	return q.Length() == 0
+}
+
+func (q *Queue) Length() uint64 {
+	return q.tail - q.head
+}
+
+func (q *Queue) run() {
+	var runLock sync.Mutex
+	go func() {
+		for {
+			runLock.Lock()
+			if q.IsEmpty() {
+				runLock.Unlock()
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+
+			entry, err := q.next()
+			runLock.Unlock()
+			if err != nil {
+				log.Warningf("Error Dequeue()-ing: %s, %s", entry, err)
+				continue
+			}
+
+			q.dequeue <- entry
+		}
+	}()
+}
+
+func (q *Queue) next() (*Entry, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
-
-	if q.IsEmpty() {
-		// TODO figure out how IPFS folks are doing custom errors and make this comply
-		return nil, errors.New("queue is empty")
-	}
 
 	var nextKey ds.Key
 	var value []byte
@@ -105,14 +139,6 @@ func (q *Queue) Dequeue() (*Entry, error) {
 	q.head++
 
 	return entry, nil
-}
-
-func (q *Queue) IsEmpty() bool {
-	return q.Length() == 0
-}
-
-func (q *Queue) Length() uint64 {
-	return q.tail - q.head
 }
 
 func (q *Queue) queueKey(id uint64) ds.Key {
