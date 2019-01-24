@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 // Entry
@@ -37,6 +36,7 @@ type Queue struct {
 	datastore ds.Datastore
 
 	dequeue chan *Entry
+	notEmpty chan struct{}
 }
 
 func NewQueue(name string, datastore ds.Datastore) (*Queue, error) {
@@ -51,6 +51,7 @@ func NewQueue(name string, datastore ds.Datastore) (*Queue, error) {
 		lock: sync.Mutex{},
 		datastore: datastore,
 		dequeue: make(chan *Entry),
+		notEmpty: make(chan struct{}),
 	}
 	q.run()
 	return q, nil
@@ -60,6 +61,8 @@ func (q *Queue) Enqueue(cid cid.Cid) error {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
+	wasEmpty := q.IsEmpty()
+
 	nextKey := q.queueKey(q.tail)
 
 	if err := q.datastore.Put(nextKey, cid.Bytes()); err != nil {
@@ -67,6 +70,11 @@ func (q *Queue) Enqueue(cid cid.Cid) error {
 	}
 
 	q.tail++
+
+	if wasEmpty {
+		q.notEmpty <- struct{}{}
+	}
+
 	return nil
 }
 
@@ -83,18 +91,15 @@ func (q *Queue) Length() uint64 {
 }
 
 func (q *Queue) run() {
-	var runLock sync.Mutex
 	go func() {
+		// TODO: Add ctx case
 		for {
-			runLock.Lock()
 			if q.IsEmpty() {
-				runLock.Unlock()
-				time.Sleep(10 * time.Millisecond)
-				continue
+				// wait for a notEmpty message
+				<-q.notEmpty
 			}
 
 			entry, err := q.next()
-			runLock.Unlock()
 			if err != nil {
 				log.Warningf("Error Dequeue()-ing: %s, %s", entry, err)
 				continue
@@ -112,6 +117,7 @@ func (q *Queue) next() (*Entry, error) {
 	var nextKey ds.Key
 	var value []byte
 	var err error
+	// TODO: Add ctx case
 	for {
 		nextKey = q.queueKey(q.head)
 		value, err = q.datastore.Get(nextKey)

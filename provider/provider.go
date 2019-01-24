@@ -101,6 +101,8 @@ func (p *Provider) handleAnnouncements() {
 				case <-p.ctx.Done():
 					return
 				case entry := <-p.queue.Dequeue():
+					// TODO: this isTracking check is the only difference between this logic and the needed
+					//		 reprovide logic, I need to factor this out
 					isTracking, err := p.tracker.IsTracking(entry.cid)
 					if err != nil {
 						log.Warningf("Unable to check provider tracking on outgoing: %s, %s", entry.cid, err)
