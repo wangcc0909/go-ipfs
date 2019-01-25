@@ -111,7 +111,6 @@ func (p *Provider) handleAnnouncements() {
 					if isTracking {
 						if err := entry.Complete(); err != nil {
 							log.Warningf("Unable to complete queue entry when already tracking: %s, %s", entry.cid, err)
-							continue
 						}
 						continue
 					}
@@ -136,7 +135,6 @@ func (p *Provider) handleAnnouncements() {
 						// TODO: Maybe put these failures onto a failures queue?
 						if err := entry.Complete(); err != nil {
 							log.Warningf("Unable to complete queue entry for failure: %s, %s", entry.cid, err)
-							continue
 						}
 						continue
 					}

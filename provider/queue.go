@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"gx/ipfs/QmR8BauakNcBa3RbE4nbQu76PDiJgoQgz8AJdhJuiU4TAw/go-cid"
 	ds "gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore"
 	"gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore/query"
@@ -29,6 +30,8 @@ type Queue struct {
 	// e.g. provider vs reprovider
 	name string
 
+	ctx context.Context
+
 	tail uint64
 	head uint64
 
@@ -39,13 +42,14 @@ type Queue struct {
 	notEmpty chan struct{}
 }
 
-func NewQueue(name string, datastore ds.Datastore) (*Queue, error) {
-	head, tail, err := getQueueHeadTail(name, datastore)
+func NewQueue(name string, ctx context.Context, datastore ds.Datastore) (*Queue, error) {
+	head, tail, err := getQueueHeadTail(name, ctx, datastore)
 	if err != nil {
 		return nil, err
 	}
 	q := &Queue{
 		name: name,
+		ctx: ctx,
 		head: head,
 		tail: tail,
 		lock: sync.Mutex{},
@@ -92,8 +96,12 @@ func (q *Queue) Length() uint64 {
 
 func (q *Queue) run() {
 	go func() {
-		// TODO: Add ctx case
 		for {
+			select {
+			case <-q.ctx.Done():
+				return
+			default:
+			}
 			if q.IsEmpty() {
 				// wait for a notEmpty message
 				<-q.notEmpty
@@ -117,8 +125,12 @@ func (q *Queue) next() (*Entry, error) {
 	var nextKey ds.Key
 	var value []byte
 	var err error
-	// TODO: Add ctx case
 	for {
+		select {
+		case <-q.ctx.Done():
+			return nil, nil
+		default:
+		}
 		nextKey = q.queueKey(q.head)
 		value, err = q.datastore.Get(nextKey)
 		if err == ds.ErrNotFound {
@@ -155,7 +167,7 @@ func queuePrefix(name string) string {
 	return "/" + name + "/queue/"
 }
 
-func getQueueHeadTail(name string, datastore ds.Datastore) (uint64, uint64, error) {
+func getQueueHeadTail(name string, ctx context.Context, datastore ds.Datastore) (uint64, uint64, error) {
 	query := query.Query{Prefix: queuePrefix(name)}
 	results, err := datastore.Query(query)
 	if err != nil {
@@ -165,6 +177,11 @@ func getQueueHeadTail(name string, datastore ds.Datastore) (uint64, uint64, erro
 	var tail uint64 = 0
 	var head uint64 = math.MaxUint64
 	for entry := range results.Next() {
+		select {
+		case <-ctx.Done():
+			return 0, 0, nil
+		default:
+		}
 		keyId := strings.TrimPrefix(entry.Key, queuePrefix(name))
 		id, err := strconv.ParseUint(keyId, 10, 64)
 		if err != nil {

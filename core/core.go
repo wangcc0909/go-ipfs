@@ -324,7 +324,7 @@ func (n *IpfsNode) startLateOnlineServices(ctx context.Context) error {
 	// TODO: Specify strategy in cfg
 	strategy := provider.NewProvideAllStrategy(n.DAG)
 	tracker := provider.NewTracker(n.Repo.Datastore())
-	queue, err := provider.NewQueue("provider", n.Repo.Datastore())
+	queue, err := provider.NewQueue("provider", ctx, n.Repo.Datastore())
 	if err != nil {
 		return err
 	}
