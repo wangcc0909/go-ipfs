@@ -87,11 +87,7 @@ func (q *Queue) Dequeue() <-chan *Entry {
 }
 
 func (q *Queue) IsEmpty() bool {
-	return q.Length() == 0
-}
-
-func (q *Queue) Length() uint64 {
-	return q.tail - q.head
+	return (q.tail - q.head) == 0
 }
 
 func (q *Queue) run() {

@@ -15,7 +15,7 @@ var (
 )
 
 const (
-	provideOutgoingWorkerLimit = 512
+	provideOutgoingWorkerLimit = 8
 	provideOutgoingTimeout     = 15 * time.Second
 )
 
@@ -63,14 +63,11 @@ func (p *Provider) Provide(root cid.Cid) error {
 		if err != nil {
 			return err
 		}
-
-		if !isTracking {
-			p.lock.Lock()
-			if err := p.queue.Enqueue(cid); err != nil {
-				p.lock.Unlock()
-				return err
-			}
-			p.lock.Unlock()
+		if isTracking {
+			continue
+		}
+		if err := p.queue.Enqueue(cid); err != nil {
+			return err
 		}
 	}
 
@@ -101,8 +98,7 @@ func (p *Provider) handleAnnouncements() {
 				case <-p.ctx.Done():
 					return
 				case entry := <-p.queue.Dequeue():
-					// TODO: this isTracking check is the only difference between this logic and the needed
-					//		 reprovide logic, I need to factor this out
+					// skip if already tracking
 					isTracking, err := p.tracker.IsTracking(entry.cid)
 					if err != nil {
 						log.Warningf("Unable to check provider tracking on outgoing: %s, %s", entry.cid, err)
@@ -115,6 +111,7 @@ func (p *Provider) handleAnnouncements() {
 						continue
 					}
 
+					// if not in blockstore, skip and stop tracking
 					inBlockstore, err := p.blockstore.Has(entry.cid)
 					if err != nil {
 						log.Warningf("Unable to check for presence in blockstore: %s, %s", entry.cid, err)
@@ -130,6 +127,7 @@ func (p *Provider) handleAnnouncements() {
 						continue
 					}
 
+					// announce
 					if err := p.announce(entry.cid); err != nil {
 						log.Warningf("Unable to announce providing: %s, %s", entry.cid, err)
 						// TODO: Maybe put these failures onto a failures queue?
@@ -139,13 +137,15 @@ func (p *Provider) handleAnnouncements() {
 						continue
 					}
 
-					if err := entry.Complete(); err != nil {
-						log.Warningf("Unable to complete queue entry for success: %s, %s", entry.cid, err)
+					// track entry
+					if err := p.tracker.Track(entry.cid); err != nil {
+						log.Warningf("Unable to track: %s, %s", entry.cid, err)
 						continue
 					}
 
-					if err := p.tracker.Track(entry.cid); err != nil {
-						log.Warningf("Unable to track: %s, %s", entry.cid, err)
+					// remove entry from queue
+					if err := entry.Complete(); err != nil {
+						log.Warningf("Unable to complete queue entry for success: %s, %s", entry.cid, err)
 						continue
 					}
 				}
