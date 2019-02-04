@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"gx/ipfs/QmR8BauakNcBa3RbE4nbQu76PDiJgoQgz8AJdhJuiU4TAw/go-cid"
 	bstore "gx/ipfs/QmS2aqUZLJp8kF1ihE5rvDGE5LvmKDPnx32w9Z1BW9xLV5/go-ipfs-blockstore"
 	"gx/ipfs/QmZBH87CAPFHcc7cYmBqeSQ98zQ3SX9KUxiYgzPmLWNVKz/go-libp2p-routing"
@@ -79,10 +80,12 @@ func (p *Provider) Unprovide(cid cid.Cid) error {
 func (p *Provider) announce(cid cid.Cid) error {
 	ctx, cancel := context.WithTimeout(p.ctx, provideOutgoingTimeout)
 	defer cancel()
+	fmt.Println("provider - announce - start - ", cid)
 	if err := p.contentRouting.Provide(ctx, cid, true); err != nil {
 		log.Warningf("Failed to provide cid: %s", err)
 		return err
 	}
+	fmt.Println("provider - announce - end - ", cid)
 	return nil
 }
 
