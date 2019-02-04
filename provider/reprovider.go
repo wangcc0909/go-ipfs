@@ -13,6 +13,8 @@ var (
 	reprovideOutgoingWorkerLimit = 8
 )
 
+type doneFunc func(error)
+
 type Reprovider struct {
 	ctx context.Context
 	queue *Queue
@@ -20,6 +22,7 @@ type Reprovider struct {
 	tick time.Duration
 	blockstore blockstore.Blockstore
 	contentRouting routing.ContentRouting
+	trigger chan doneFunc
 }
 
 func NewReprovider(ctx context.Context, queue *Queue, tracker *Tracker, tick time.Duration, blockstore blockstore.Blockstore, contentRouting routing.ContentRouting) *Reprovider {
@@ -30,6 +33,7 @@ func NewReprovider(ctx context.Context, queue *Queue, tracker *Tracker, tick tim
 		tick: tick,
 		blockstore: blockstore,
 		contentRouting: contentRouting,
+		trigger: make(chan doneFunc),
 	}
 }
 
@@ -52,7 +56,79 @@ func (rp *Reprovider) Reprovide() error {
 	return nil
 }
 
+// Trigger starts reprovision process in rp.Run and waits for it
+func (rp *Reprovider) Trigger(ctx context.Context) error {
+	progressCtx, done := context.WithCancel(ctx)
+
+	var err error
+	df := func(e error) {
+		err = e
+		done()
+	}
+
+	select {
+	case <-rp.ctx.Done():
+		return context.Canceled
+	case <-ctx.Done():
+		return context.Canceled
+	case rp.trigger <- df:
+		<-progressCtx.Done()
+		return err
+	}
+}
+
 func (rp *Reprovider) handleTriggers() {
+	// dont reprovide immediately.
+	// may have just started the daemon and shutting it down immediately.
+	// probability( up another minute | uptime ) increases with uptime.
+	after := time.After(time.Minute)
+	var done doneFunc
+	for {
+		if rp.tick == 0 {
+			after = make(chan time.Time)
+		}
+
+		select {
+		case <-rp.ctx.Done():
+			return
+		case done = <-rp.trigger:
+		case <-after:
+		}
+
+		//'mute' the trigger channel so when `ipfs bitswap reprovide` is called
+		//a 'reprovider is already running' error is returned
+		unmute := rp.muteTrigger()
+
+		err := rp.Reprovide()
+		if err != nil {
+			log.Debug(err)
+		}
+
+		if done != nil {
+			done(err)
+		}
+
+		unmute()
+
+		after = time.After(rp.tick)
+	}
+}
+
+func (rp *Reprovider) muteTrigger() context.CancelFunc {
+	ctx, cf := context.WithCancel(rp.ctx)
+	go func() {
+		defer cf()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case done := <-rp.trigger:
+				done(fmt.Errorf("reprovider is already running"))
+			}
+		}
+	}()
+
+	return cf
 }
 
 func (rp *Reprovider) handleAnnouncements() {
@@ -97,7 +173,7 @@ func (rp *Reprovider) handleAnnouncements() {
 
 					// remove entry from queue
 					if err := entry.Complete(); err != nil {
-						log.Warningf("Unable to comple entry: %s, %s", entry, err)
+						log.Warningf("Unable to complete entry: %s, %s", entry, err)
 						continue
 					}
 				}

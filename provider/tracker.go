@@ -39,6 +39,7 @@ func (t *Tracker) Tracking(ctx context.Context) (<-chan cid.Cid, error) {
 	}
 	cids := make(chan cid.Cid)
 	go func() {
+		defer close(cids);
 		for result := range results.Next() {
 			key, err := cid.Parse(result.Value)
 			if err != nil {
