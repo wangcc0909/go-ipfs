@@ -45,7 +45,7 @@ type Cleanup interface {
 //
 // The routine then iterates over every block in the blockstore and
 // deletes any block that is not found in the marked set.
-func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn pin.Pinner, cleanup Cleanup, bestEffortRoots []cid.Cid) <-chan Result {
+func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn pin.Pinner, bestEffortRoots []cid.Cid) <-chan Result {
 	elock := log.EventBegin(ctx, "GC.lockWait")
 	unlocker := bs.GCLock()
 	elock.Done()
@@ -104,9 +104,6 @@ func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn 
 						// log.Errorf("Error removing key from blockstore: %s", err)
 						// continue as error is non-fatal
 						continue loop
-					}
-					if err := cleanup.Cleanup(k); err != nil {
-						log.Warningf("Warning: unable to cleanup block: %s", k)
 					}
 					select {
 					case output <- Result{KeyRemoved: k}:
