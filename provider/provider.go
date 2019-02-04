@@ -6,7 +6,6 @@ import (
 	bstore "gx/ipfs/QmS2aqUZLJp8kF1ihE5rvDGE5LvmKDPnx32w9Z1BW9xLV5/go-ipfs-blockstore"
 	"gx/ipfs/QmZBH87CAPFHcc7cYmBqeSQ98zQ3SX9KUxiYgzPmLWNVKz/go-libp2p-routing"
 	logging "gx/ipfs/QmcuXC5cxs79ro2cUuHs4HQ2bkDLJUYokwL8aivcX6HW3C/go-log"
-	"sync"
 	"time"
 )
 
@@ -23,7 +22,6 @@ type Strategy func(context.Context, cid.Cid) <-chan cid.Cid
 
 type Provider struct {
 	ctx context.Context
-	lock sync.Mutex
 
 	// strategy for deciding which CIDs, given a CID, should be provided
 	strategy Strategy
@@ -45,7 +43,6 @@ func NewProvider(ctx context.Context, strategy Strategy, tracker *Tracker, queue
 		queue:          queue,
 		blockstore:   	blockstore,
 		contentRouting: contentRouting,
-		lock:           sync.Mutex{},
 	}
 }
 
