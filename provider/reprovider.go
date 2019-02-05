@@ -3,10 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
 	"gx/ipfs/QmS2aqUZLJp8kF1ihE5rvDGE5LvmKDPnx32w9Z1BW9xLV5/go-ipfs-blockstore"
-	"gx/ipfs/QmR8BauakNcBa3RbE4nbQu76PDiJgoQgz8AJdhJuiU4TAw/go-cid"
 	"gx/ipfs/QmZBH87CAPFHcc7cYmBqeSQ98zQ3SX9KUxiYgzPmLWNVKz/go-libp2p-routing"
+	"time"
 )
 
 var (
@@ -81,7 +80,7 @@ func (rp *Reprovider) handleTriggers() {
 	// dont reprovide immediately.
 	// may have just started the daemon and shutting it down immediately.
 	// probability( up another minute | uptime ) increases with uptime.
-	after := time.After(time.Minute)
+	after := time.After(time.Hour)
 	var done doneFunc
 	for {
 		if rp.tick == 0 {
@@ -139,58 +138,14 @@ func (rp *Reprovider) handleAnnouncements() {
 				case <-rp.ctx.Done():
 					return
 				case entry := <-rp.queue.Dequeue():
-					// if not in blockstore, skip and stop tracking
-                	inBlockstore, err := rp.blockstore.Has(entry.cid)
-					if err != nil {
-						log.Warningf("Unable to check for presence in blockstore: %s, %s", entry.cid, err)
-						continue
+					if err := doProvide(rp.ctx, rp.tracker, rp.blockstore, rp.contentRouting, entry.cid); err != nil {
+						log.Warningf("Unable to reprovide entry: %s, %s", entry.cid, err)
 					}
-					if !inBlockstore {
-						if err := rp.tracker.Untrack(entry.cid); err != nil {
-							log.Warningf("Unable to untrack: %s, %s", entry.cid, err)
-						}
-						if err := entry.Complete(); err != nil {
-							log.Warningf("Unable to complete queue entry when untracking: %s, %s", entry.cid, err)
-						}
-						continue
-					}
-
-					// announce
-					if err := rp.announce(entry.cid); err != nil {
-						log.Warningf("Unable to announce providing: %s, %s", entry.cid, err)
-						// TODO: Maybe put these failures onto a failures queue?
-						if err := entry.Complete(); err != nil {
-							log.Warningf("Unable to complete queue entry for failure: %s, %s", entry.cid, err)
-						}
-						continue
-					}
-
-					// track entry
-					if err := rp.tracker.Track(entry.cid); err != nil {
-						log.Warningf("Unable to track: %s, %s", entry.cid, err)
-						continue
-					}
-
-					// remove entry from queue
 					if err := entry.Complete(); err != nil {
-						log.Warningf("Unable to complete entry: %s, %s", entry, err)
-						continue
+						log.Warningf("Unable to complete queue entry when reproviding: %s, %s", entry.cid, err)
 					}
 				}
 			}
 		}()
 	}
-}
-
-// Announce to the world that a block is provided.
-func (rp *Reprovider) announce(cid cid.Cid) error {
-	ctx, cancel := context.WithTimeout(rp.ctx, provideOutgoingTimeout)
-	defer cancel()
-	fmt.Println("reprovider - announce - start - ", cid)
-	if err := rp.contentRouting.Provide(ctx, cid, true); err != nil {
-		log.Warningf("Failed to provide cid: %s", err)
-		return err
-	}
-	fmt.Println("reprovider - announce - end - ", cid)
-	return nil
 }

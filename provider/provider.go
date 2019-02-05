@@ -76,19 +76,6 @@ func (p *Provider) Unprovide(cid cid.Cid) error {
 	return p.tracker.Untrack(cid)
 }
 
-// Announce to the world that a block is provided.
-func (p *Provider) announce(cid cid.Cid) error {
-	ctx, cancel := context.WithTimeout(p.ctx, provideOutgoingTimeout)
-	defer cancel()
-	fmt.Println("provider - announce - start - ", cid)
-	if err := p.contentRouting.Provide(ctx, cid, true); err != nil {
-		log.Warningf("Failed to provide cid: %s", err)
-		return err
-	}
-	fmt.Println("provider - announce - end - ", cid)
-	return nil
-}
-
 // Handle all outgoing cids by providing (announcing) them
 func (p *Provider) handleAnnouncements() {
 	for workers := 0; workers < provideOutgoingWorkerLimit; workers++ {
@@ -111,42 +98,12 @@ func (p *Provider) handleAnnouncements() {
 						continue
 					}
 
-					// if not in blockstore, skip and stop tracking
-					inBlockstore, err := p.blockstore.Has(entry.cid)
-					if err != nil {
-						log.Warningf("Unable to check for presence in blockstore: %s, %s", entry.cid, err)
-						continue
-					}
-					if !inBlockstore {
-						if err := p.tracker.Untrack(entry.cid); err != nil {
-							log.Warningf("Unable to untrack: %s, %s", entry.cid, err)
-						}
-						if err := entry.Complete(); err != nil {
-							log.Warningf("Unable to complete queue entry when untracking: %s, %s", entry.cid, err)
-						}
-						continue
+					if err := doProvide(p.ctx, p.tracker, p.blockstore, p.contentRouting, entry.cid); err != nil {
+						log.Warningf("Unable to provide entry: %s, %s", entry.cid, err)
 					}
 
-					// announce
-					if err := p.announce(entry.cid); err != nil {
-						log.Warningf("Unable to announce providing: %s, %s", entry.cid, err)
-						// TODO: Maybe put these failures onto a failures queue?
-						if err := entry.Complete(); err != nil {
-							log.Warningf("Unable to complete queue entry for failure: %s, %s", entry.cid, err)
-						}
-						continue
-					}
-
-					// track entry
-					if err := p.tracker.Track(entry.cid); err != nil {
-						log.Warningf("Unable to track: %s, %s", entry.cid, err)
-						continue
-					}
-
-					// remove entry from queue
 					if err := entry.Complete(); err != nil {
-						log.Warningf("Unable to complete queue entry for success: %s, %s", entry.cid, err)
-						continue
+						log.Warningf("Unable to complete queue entry when providing: %s, %s", entry.cid, err)
 					}
 				}
 			}
@@ -154,3 +111,39 @@ func (p *Provider) handleAnnouncements() {
 	}
 }
 
+// TODO: better document this provide logic
+func doProvide(ctx context.Context, tracker *Tracker, blockstore bstore.Blockstore, contentRouting routing.ContentRouting, key cid.Cid) error {
+	// if not in blockstore, skip and stop tracking
+	inBlockstore, err := blockstore.Has(key)
+	if err != nil {
+		log.Warningf("Unable to check for presence in blockstore: %s, %s", key, err)
+		return err
+	}
+	if !inBlockstore {
+		if err := tracker.Untrack(key); err != nil {
+			log.Warningf("Unable to untrack: %s, %s", key, err)
+			return err
+		}
+		return nil
+	}
+
+	// announce
+	fmt.Println("announce - start - ", key)
+	ctx, cancel := context.WithTimeout(ctx, provideOutgoingTimeout)
+	if err := contentRouting.Provide(ctx, key, true); err != nil {
+		log.Warningf("Failed to provide cid: %s", err)
+		// TODO: Maybe put these failures onto a failures queue?
+		cancel()
+		return err
+	}
+	cancel()
+	fmt.Println("announce - end - ", key)
+
+	// track entry
+	if err := tracker.Track(key); err != nil {
+		log.Warningf("Unable to track: %s, %s", key, err)
+        return err
+	}
+
+	return nil
+}
