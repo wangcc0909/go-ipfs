@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"gx/ipfs/QmS2aqUZLJp8kF1ihE5rvDGE5LvmKDPnx32w9Z1BW9xLV5/go-ipfs-blockstore"
 	"gx/ipfs/QmZBH87CAPFHcc7cYmBqeSQ98zQ3SX9KUxiYgzPmLWNVKz/go-libp2p-routing"
 	"time"
@@ -57,12 +56,12 @@ func (rp *Reprovider) Reprovide() error {
 
 // Trigger starts reprovision process in rp.Run and waits for it
 func (rp *Reprovider) Trigger(ctx context.Context) error {
-	progressCtx, done := context.WithCancel(ctx)
+	progressCtx, cancel := context.WithCancel(ctx)
 
 	var err error
-	df := func(e error) {
+	done := func(e error) {
 		err = e
-		done()
+		cancel()
 	}
 
 	select {
@@ -70,9 +69,13 @@ func (rp *Reprovider) Trigger(ctx context.Context) error {
 		return context.Canceled
 	case <-ctx.Done():
 		return context.Canceled
-	case rp.trigger <- df:
-		<-progressCtx.Done()
-		return err
+	case rp.trigger <- done:
+		select {
+		case <-progressCtx.Done():
+			return err
+		case <-ctx.Done():
+			return context.Canceled
+		}
 	}
 }
 
@@ -80,7 +83,7 @@ func (rp *Reprovider) handleTriggers() {
 	// dont reprovide immediately.
 	// may have just started the daemon and shutting it down immediately.
 	// probability( up another minute | uptime ) increases with uptime.
-	after := time.After(time.Hour)
+	after := time.After(time.Minute)
 	var done doneFunc
 	for {
 		if rp.tick == 0 {
@@ -94,10 +97,6 @@ func (rp *Reprovider) handleTriggers() {
 		case <-after:
 		}
 
-		//'mute' the trigger channel so when `ipfs bitswap reprovide` is called
-		//a 'reprovider is already running' error is returned
-		unmute := rp.muteTrigger()
-
 		err := rp.Reprovide()
 		if err != nil {
 			log.Debug(err)
@@ -107,27 +106,8 @@ func (rp *Reprovider) handleTriggers() {
 			done(err)
 		}
 
-		unmute()
-
 		after = time.After(rp.tick)
 	}
-}
-
-func (rp *Reprovider) muteTrigger() context.CancelFunc {
-	ctx, cf := context.WithCancel(rp.ctx)
-	go func() {
-		defer cf()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case done := <-rp.trigger:
-				done(fmt.Errorf("reprovider is already running"))
-			}
-		}
-	}()
-
-	return cf
 }
 
 func (rp *Reprovider) handleAnnouncements() {
