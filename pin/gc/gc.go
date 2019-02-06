@@ -29,13 +29,6 @@ type Result struct {
 	Error      error
 }
 
-// Called with a cid.Cid that has just been removed from the blockstore.
-// The intention is to clean up any other information about this block
-// such as provider tracking.
-type Cleanup interface {
-	Cleanup(cid.Cid) error
-}
-
 // GC performs a mark and sweep garbage collection of the blocks in the blockstore
 // first, it creates a 'marked' set and adds to it the following:
 // - all recursively pinned blocks, plus all of their descendants (recursively)
