@@ -11,8 +11,9 @@ import (
 	"sync"
 )
 
-// Entry
-
+// Entry allows for the durability in the queue. When a cid is dequeued it is
+// not removed from the datastore until you call Complete() on the entry you
+// receive.
 type Entry struct {
 	cid cid.Cid
 	key ds.Key
@@ -23,8 +24,11 @@ func (e *Entry) Complete() error {
 	return e.datastore.Delete(e.key)
 }
 
-// Queue
-
+// Queue provides a durable, FIFO interface to the datastore for storing cids
+//
+// Durability just means that cids in the process of being provided when a
+// crash or shutdown occurs will still be in the queue when the node is
+// brought back online.
 type Queue struct {
 	// used to differentiate queues in datastore
 	// e.g. provider vs reprovider
@@ -61,6 +65,7 @@ func NewQueue(name string, ctx context.Context, datastore ds.Datastore) (*Queue,
 	return q, nil
 }
 
+// Put a cid in the queue
 func (q *Queue) Enqueue(cid cid.Cid) error {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -82,6 +87,7 @@ func (q *Queue) Enqueue(cid cid.Cid) error {
 	return nil
 }
 
+// Remove an entry from the queue.
 func (q *Queue) Dequeue() <-chan *Entry {
 	return q.dequeue
 }
@@ -90,6 +96,8 @@ func (q *Queue) IsEmpty() bool {
 	return (q.tail - q.head) == 0
 }
 
+// dequeue items when the dequeue channel is available to
+// be written to
 func (q *Queue) run() {
 	go func() {
 		for {
@@ -114,6 +122,8 @@ func (q *Queue) run() {
 	}()
 }
 
+// Find the next item in the queue, crawl forward if an entry is not
+// found in the next spot.
 func (q *Queue) next() (*Entry, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -122,6 +132,7 @@ func (q *Queue) next() (*Entry, error) {
 	var value []byte
 	var err error
 	for {
+		// TODO: if head >= tail, then return nil, empty queue error
 		select {
 		case <-q.ctx.Done():
 			return nil, nil
@@ -163,6 +174,7 @@ func queuePrefix(name string) string {
 	return "/" + name + "/queue/"
 }
 
+// crawl over the queue entries to find the head and tail
 func getQueueHeadTail(name string, ctx context.Context, datastore ds.Datastore) (uint64, uint64, error) {
 	query := query.Query{Prefix: queuePrefix(name)}
 	results, err := datastore.Query(query)

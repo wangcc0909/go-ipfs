@@ -9,6 +9,7 @@ import (
 
 const providerTrackingPrefix = "/provider/tracking/"
 
+// Keeps track of which cids are being provided.
 type Tracker struct {
 	datastore ds.Datastore
 }
@@ -31,6 +32,7 @@ func (t *Tracker) Untrack(cid cid.Cid) error {
 	return t.datastore.Delete(providerTrackingKey(cid))
 }
 
+// Returns all the cids that are being tracked.
 func (t *Tracker) Tracking(ctx context.Context) (<-chan cid.Cid, error) {
 	q := query.Query{Prefix: providerTrackingPrefix}
 	results, err := t.datastore.Query(q)

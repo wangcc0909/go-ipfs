@@ -1,5 +1,8 @@
 package provider
 
+// TODO: The strategy module is going to change so that it just
+// calls Provide on a given provider instead of returning a channel.
+
 import (
 	"context"
 	"gx/ipfs/QmR8BauakNcBa3RbE4nbQu76PDiJgoQgz8AJdhJuiU4TAw/go-cid"

@@ -23,6 +23,9 @@ type Reprovider struct {
 	trigger chan doneFunc
 }
 
+// Reprovider periodically re-announces the cids that have been provided. These
+// reprovides can be run on an interval and/or manually. Reprovider also untracks
+// cids that are no longer in the blockstore.
 func NewReprovider(ctx context.Context, queue *Queue, tracker *Tracker, tick time.Duration, blockstore blockstore.Blockstore, contentRouting routing.ContentRouting) *Reprovider {
 	return &Reprovider{
 		ctx: ctx,
@@ -35,11 +38,14 @@ func NewReprovider(ctx context.Context, queue *Queue, tracker *Tracker, tick tim
 	}
 }
 
+// Begin listening for triggers and reprovide whatever is
+// in the reprovider queue.
 func (rp *Reprovider) Run() {
 	go rp.handleTriggers()
 	go rp.handleAnnouncements()
 }
 
+// Add all the cids in the tracker to the reprovide queue
 func (rp *Reprovider) Reprovide() error {
 	cids, err := rp.tracker.Tracking(rp.ctx)
 	if err != nil {
@@ -54,7 +60,7 @@ func (rp *Reprovider) Reprovide() error {
 	return nil
 }
 
-// Trigger starts reprovision process in rp.Run and waits for it
+// Trigger causes a reprovide
 func (rp *Reprovider) Trigger(ctx context.Context) error {
 	progressCtx, cancel := context.WithCancel(ctx)
 

@@ -1,3 +1,6 @@
+// Package provider implements structures and methods to provide blocks,
+// keep track of which blocks are provided, and to allow those blocks to
+// be reprovided.
 package provider
 
 import (
@@ -21,6 +24,8 @@ const (
 
 type Strategy func(context.Context, cid.Cid) <-chan cid.Cid
 
+// Provider announces blocks to the network, tracks which blocks are
+// being provided, and untracks blocks when they're no longer in the blockstore.
 type Provider struct {
 	ctx context.Context
 
@@ -52,7 +57,7 @@ func (p *Provider) Run() {
 	p.handleAnnouncements()
 }
 
-// Provider the given cid using specified strategy.
+// Provide the given cid using specified strategy.
 func (p *Provider) Provide(root cid.Cid) error {
 	cids := p.strategy(p.ctx, root)
 
@@ -72,6 +77,7 @@ func (p *Provider) Provide(root cid.Cid) error {
 	return nil
 }
 
+// Stop providing a block
 func (p *Provider) Unprovide(cid cid.Cid) error {
 	return p.tracker.Untrack(cid)
 }
