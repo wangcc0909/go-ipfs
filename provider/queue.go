@@ -210,6 +210,9 @@ func getQueueHeadTail(name string, ctx context.Context, datastore ds.Datastore) 
 			tail = (id+1)
 		}
 	}
+	if err := results.Close(); err != nil {
+		return 0, 0, err
+	}
 	if head == math.MaxUint64 {
 		head = 0
 	}
