@@ -4,10 +4,10 @@ import (
 	"context"
 	"gx/ipfs/QmR8BauakNcBa3RbE4nbQu76PDiJgoQgz8AJdhJuiU4TAw/go-cid"
 	ds "gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore"
+	"gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore/namespace"
 	"gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore/query"
 	"math"
 	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -57,7 +57,7 @@ func NewQueue(name string, ctx context.Context, datastore ds.Datastore) (*Queue,
 		head: head,
 		tail: tail,
 		lock: sync.Mutex{},
-		datastore: datastore,
+		datastore: namespace.Wrap(datastore, ds.NewKey("/" + name + "/queue/")),
 		dequeue: make(chan *Entry),
 		notEmpty: make(chan struct{}),
 	}
@@ -178,16 +178,12 @@ func (q *Queue) next() (*Entry, error) {
 }
 
 func (q *Queue) queueKey(id uint64) ds.Key {
-	return ds.NewKey(queuePrefix(q.name) + strconv.FormatUint(id, 10))
-}
-
-func queuePrefix(name string) string {
-	return "/" + name + "/queue/"
+	return ds.NewKey(strconv.FormatUint(id, 10))
 }
 
 // crawl over the queue entries to find the head and tail
 func getQueueHeadTail(name string, ctx context.Context, datastore ds.Datastore) (uint64, uint64, error) {
-	query := query.Query{Prefix: queuePrefix(name)}
+	query := query.Query{}
 	results, err := datastore.Query(query)
 	if err != nil {
 		return 0, 0, err
@@ -201,8 +197,7 @@ func getQueueHeadTail(name string, ctx context.Context, datastore ds.Datastore) 
 			return 0, 0, nil
 		default:
 		}
-		keyId := strings.TrimPrefix(entry.Key, queuePrefix(name))
-		id, err := strconv.ParseUint(keyId, 10, 64)
+		id, err := strconv.ParseUint(entry.Key, 10, 64)
 		if err != nil {
 			return 0, 0, err
 		}

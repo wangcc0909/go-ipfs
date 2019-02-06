@@ -3,8 +3,9 @@ package provider
 import (
 	"context"
 	"gx/ipfs/QmR8BauakNcBa3RbE4nbQu76PDiJgoQgz8AJdhJuiU4TAw/go-cid"
-	ds "gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore"
+	"gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore/namespace"
 	"gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore/query"
+	ds "gx/ipfs/Qmf4xQhNomPNhrtZc67qSnfJSjxjXs9LWvknJtSXwimPrM/go-datastore"
 )
 
 const providerTrackingPrefix = "/provider/tracking/"
@@ -16,7 +17,7 @@ type Tracker struct {
 
 func NewTracker(datastore ds.Datastore) *Tracker {
 	return &Tracker{
-		datastore: datastore,
+		datastore: namespace.Wrap(datastore, ds.NewKey(providerTrackingPrefix)),
 	}
 }
 
@@ -34,7 +35,7 @@ func (t *Tracker) Untrack(cid cid.Cid) error {
 
 // Returns all the cids that are being tracked.
 func (t *Tracker) Tracking(ctx context.Context) (<-chan cid.Cid, error) {
-	q := query.Query{Prefix: providerTrackingPrefix}
+	q := query.Query{}
 	results, err := t.datastore.Query(q)
 	if err != nil {
 		return nil, err
@@ -58,5 +59,5 @@ func (t *Tracker) Tracking(ctx context.Context) (<-chan cid.Cid, error) {
 }
 
 func providerTrackingKey(cid cid.Cid) ds.Key {
-	return ds.NewKey(providerTrackingPrefix + cid.String())
+	return ds.NewKey(cid.String())
 }
