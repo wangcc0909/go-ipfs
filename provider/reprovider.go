@@ -93,7 +93,7 @@ func (rp *Reprovider) handleTriggers() {
 	var done doneFunc
 	for {
 		if rp.tick == 0 {
-			after = make(chan time.Time)
+			after = nil
 		}
 
 		select {
