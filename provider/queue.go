@@ -81,7 +81,10 @@ func (q *Queue) Enqueue(cid cid.Cid) error {
 	q.tail++
 
 	if wasEmpty {
-		q.notEmpty <- struct{}{}
+		select {
+		case q.notEmpty <- struct{}{}:
+		case <-q.ctx.Done():
+		}
 	}
 
 	return nil
@@ -107,8 +110,12 @@ func (q *Queue) run() {
 			default:
 			}
 			if q.IsEmpty() {
+				select {
+				case <-q.ctx.Done():
+					return
 				// wait for a notEmpty message
-				<-q.notEmpty
+				case <-q.notEmpty:
+				}
 			}
 
 			entry, err := q.next()
@@ -117,7 +124,11 @@ func (q *Queue) run() {
 				continue
 			}
 
-			q.dequeue <- entry
+			select {
+			case <-q.ctx.Done():
+				return
+			case q.dequeue <- entry:
+			}
 		}
 	}()
 }
