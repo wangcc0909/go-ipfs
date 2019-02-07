@@ -17,11 +17,11 @@ import (
 type Entry struct {
 	cid cid.Cid
 	key ds.Key
-	datastore ds.Datastore
+    queue *Queue
 }
 
 func (e *Entry) Complete() error {
-	return e.datastore.Delete(e.key)
+	return e.queue.remove(e.key)
 }
 
 // Queue provides a durable, FIFO interface to the datastore for storing cids
@@ -99,6 +99,10 @@ func (q *Queue) IsEmpty() bool {
 	return (q.tail - q.head) == 0
 }
 
+func (q *Queue) remove(key ds.Key) error {
+	return q.datastore.Delete(key)
+}
+
 // dequeue items when the dequeue channel is available to
 // be written to
 func (q *Queue) run() {
@@ -169,7 +173,7 @@ func (q *Queue) next() (*Entry, error) {
 	entry := &Entry {
 		cid: id,
 		key: nextKey,
-		datastore: q.datastore,
+		queue: q,
 	}
 
 	q.head++
