@@ -77,10 +77,14 @@ func (rp *Reprovider) Trigger(ctx context.Context) error {
 		return ctx.Err()
 	case rp.trigger <- done:
 		select {
+		case <-rp.ctx.Done():
+			return rp.ctx.Err()
 		case <-progressCtx.Done():
-			return err
-		case <-ctx.Done():
-			return context.Canceled
+			if err == nil {
+				return ctx.Err()
+			} else {
+				return err
+			}
 		}
 	}
 }
