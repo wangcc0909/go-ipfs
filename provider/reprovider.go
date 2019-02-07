@@ -72,9 +72,9 @@ func (rp *Reprovider) Trigger(ctx context.Context) error {
 
 	select {
 	case <-rp.ctx.Done():
-		return context.Canceled
+		return rp.ctx.Err()
 	case <-ctx.Done():
-		return context.Canceled
+		return ctx.Err()
 	case rp.trigger <- done:
 		select {
 		case <-progressCtx.Done():
