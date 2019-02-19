@@ -14,6 +14,10 @@ PATH=`pwd`/bin:$PATH
 
 test_init_ipfs
 
+test_expect_success "ipfs fsck" '
+  ipfs repo fsck
+'
+
 test_expect_success "create fake ipfs-update bin" '
   mkdir bin &&
   echo "#!/bin/sh" > bin/ipfs-update &&
